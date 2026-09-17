@@ -1,0 +1,1 @@
+JSON Schema draft 2020-12; examples clip-30s + short-5min; field-semantics + migration-notes; MIT
