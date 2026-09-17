@@ -166,6 +166,12 @@ import sys
 from pathlib import Path
 from typing import Any, Dict
 
+if __package__ in (None, ""):
+    # allow `python eval/run_eval.py` from package root: the relative imports
+    # below need a parent package, so register it before they run
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+    __package__ = "eval"
+
 from .metrics.identity import identity_score
 from .metrics.temporal import temporal_coherence
 from .metrics.style import style_fidelity
@@ -249,12 +255,6 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
-    # allow `python eval/run_eval.py` from package root
-    if __package__ is None:
-        sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-        from eval.run_eval import main as _main
-
-        raise SystemExit(_main())
     raise SystemExit(main())
 ```
 
