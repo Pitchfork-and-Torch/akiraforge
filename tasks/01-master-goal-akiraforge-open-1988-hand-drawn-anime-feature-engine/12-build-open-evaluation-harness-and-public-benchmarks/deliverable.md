@@ -456,15 +456,26 @@ def optical_flow_smoothness(
     max_spike_rate: float = 0.05,
     cut_flags: Sequence[bool] | None = None,
 ) -> Dict[str, Any]:
-    """TMP-OF: spike rate where mag > k * median on non-cut frames."""
+    """TMP-OF: spike rate where mag > k * median on non-cut frames.
+
+    Median is taken over non-cut frames only so shot-boundary spikes do not
+    inflate the baseline and hide real non-cut jitter.
+    """
     if not flow_magnitudes:
         return {"score": 0.0, "pass": False, "spike_rate": 1.0}
     mags = list(flow_magnitudes)
-    med = median(mags) or 1.0
+
+    def _is_cut(i: int) -> bool:
+        return cut_flags is not None and i < len(cut_flags) and bool(cut_flags[i])
+
+    noncut = [mag for i, mag in enumerate(mags) if not _is_cut(i)]
+    if not noncut:
+        return {"score": 0.0, "pass": False, "spike_rate": 1.0, "frames_counted": 0}
+    med = median(noncut) or 1.0
     spikes = 0
     counted = 0
     for i, mag in enumerate(mags):
-        if cut_flags and i < len(cut_flags) and cut_flags[i]:
+        if _is_cut(i):
             continue
         counted += 1
         if mag > k * med:
