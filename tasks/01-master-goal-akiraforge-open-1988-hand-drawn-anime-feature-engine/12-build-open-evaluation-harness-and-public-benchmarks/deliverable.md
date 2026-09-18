@@ -110,7 +110,7 @@ SOFTWARE.
 | Identity | `identity_score` | mean >= 0.78 | Token Jaccard now; swap to ID-EMB later |
 | Temporal drop | `temporal_coherence` | no drop > 0.15; mean >= 0.78 | TMP-FACE-DROP |
 | Style axes | `style_fidelity` | mean >= 3.5 /5; no axis < 2 | ST-AX vs style bible |
-| Optical flow | `optical_flow_smoothness` | spike rate <= 0.05 | cuts excluded |
+| Optical flow | `optical_flow_smoothness` | spike rate <= 0.05 | cuts excluded; cut_flags length must match |
 | Narrative | LLM judge prompt | mean >= 3.5; rails_ok | No auto-call in harness |
 
 ## How to run
@@ -460,13 +460,27 @@ def optical_flow_smoothness(
 
     Median is taken over non-cut frames only so shot-boundary spikes do not
     inflate the baseline and hide real non-cut jitter.
+
+    When cut_flags is provided it must be the same length as flow_magnitudes;
+    a shorter flag list previously treated trailing frames as non-cuts and
+    could hide (or invent) spikes around the truncated boundary.
     """
     if not flow_magnitudes:
         return {"score": 0.0, "pass": False, "spike_rate": 1.0}
     mags = list(flow_magnitudes)
+    if cut_flags is not None and len(cut_flags) != len(mags):
+        return {
+            "score": 0.0,
+            "pass": False,
+            "spike_rate": 1.0,
+            "error": "cut_flags_length_mismatch",
+            "frames_counted": 0,
+            "cut_flags_len": len(cut_flags),
+            "flow_len": len(mags),
+        }
 
     def _is_cut(i: int) -> bool:
-        return cut_flags is not None and i < len(cut_flags) and bool(cut_flags[i])
+        return cut_flags is not None and bool(cut_flags[i])
 
     noncut = [mag for i, mag in enumerate(mags) if not _is_cut(i)]
     if not noncut:
