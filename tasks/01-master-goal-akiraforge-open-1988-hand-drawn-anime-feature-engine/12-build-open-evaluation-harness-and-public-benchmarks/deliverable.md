@@ -110,7 +110,7 @@ SOFTWARE.
 | Identity | `identity_score` | mean >= 0.78 | Token Jaccard now; swap to ID-EMB later |
 | Temporal drop | `temporal_coherence` | no drop > 0.15; mean >= 0.78 | TMP-FACE-DROP |
 | Style axes | `style_fidelity` | mean >= 3.5 /5; no axis < 2 | ST-AX vs style bible |
-| Optical flow | `optical_flow_smoothness` | spike rate <= 0.05 | cuts excluded; cut_flags length must match |
+| Optical flow | `optical_flow_smoothness` | spike rate <= 0.05 | cuts excluded; cut_flags length must match; reject non-finite mags |
 | Narrative | LLM judge prompt | mean >= 3.5; rails_ok | No auto-call in harness |
 
 ## How to run
@@ -445,6 +445,7 @@ def style_fidelity(
 
 from __future__ import annotations
 
+import math
 from statistics import median
 from typing import Any, Dict, Sequence
 
@@ -464,6 +465,9 @@ def optical_flow_smoothness(
     When cut_flags is provided it must be the same length as flow_magnitudes;
     a shorter flag list previously treated trailing frames as non-cuts and
     could hide (or invent) spikes around the truncated boundary.
+
+    Non-finite magnitudes (NaN/Inf) previously poisoned the median so every
+    spike comparison was False and a quiet NaN clip could still pass.
     """
     if not flow_magnitudes:
         return {"score": 0.0, "pass": False, "spike_rate": 1.0}
@@ -479,10 +483,35 @@ def optical_flow_smoothness(
             "flow_len": len(mags),
         }
 
+    def _finite_number(x: object) -> bool:
+        if isinstance(x, bool):
+            return False
+        try:
+            return math.isfinite(float(x))
+        except (TypeError, ValueError):
+            return False
+
+    if not _finite_number(k) or not _finite_number(max_spike_rate):
+        return {
+            "score": 0.0,
+            "pass": False,
+            "spike_rate": 1.0,
+            "error": "non_finite_params",
+            "frames_counted": 0,
+        }
+    if any(not _finite_number(mag) for mag in mags):
+        return {
+            "score": 0.0,
+            "pass": False,
+            "spike_rate": 1.0,
+            "error": "non_finite_flow_magnitude",
+            "frames_counted": 0,
+        }
+
     def _is_cut(i: int) -> bool:
         return cut_flags is not None and bool(cut_flags[i])
 
-    noncut = [mag for i, mag in enumerate(mags) if not _is_cut(i)]
+    noncut = [float(mag) for i, mag in enumerate(mags) if not _is_cut(i)]
     if not noncut:
         return {"score": 0.0, "pass": False, "spike_rate": 1.0, "frames_counted": 0}
     med = median(noncut) or 1.0
