@@ -1,0 +1,1 @@
+agents/spec.md + MIT schemas + 3 example prompt packages; LEGAL-RAILS aligned; CC-BY-4.0/MIT
